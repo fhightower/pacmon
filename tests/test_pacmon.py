@@ -6,6 +6,7 @@ import json
 import os
 
 from pacmon import pacmon
+import pytest
 
 
 def test_initialization():
@@ -62,12 +63,14 @@ def test_pypi_file_change():
     assert len(changes['changed_files']) == 1
 
 
+@pytest.mark.npm
 def test_npm_monitoring_1():
     p = pacmon.Pacmon(os.path.abspath(os.path.join(os.path.dirname(__file__), "./test_output.json")))
     changes = p.check_package('npm', 'spaces-ng')
     assert len(changes) == 0
 
 
+@pytest.mark.npm
 def test_npm_file_replacement():
     """Make sure file removal and addition is recorded correctly."""
     with open(os.path.abspath(os.path.join(os.path.dirname(__file__), "./test_output.json")), 'w+') as f:
@@ -85,6 +88,7 @@ def test_npm_file_replacement():
     assert len(changes['changed_files']) == 0
 
 
+@pytest.mark.npm
 def test_npm_file_change():
     """Make sure a file hash change is recorded correctly."""
     with open(os.path.abspath(os.path.join(os.path.dirname(__file__), "./test_output.json")), 'w+') as f:
