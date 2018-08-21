@@ -18,26 +18,29 @@ class Pacmon(object):
         self.package_location = None
         self.package_name = None
         self.previous_data = dict()
-        # self.previous_data_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "./data/hashes.json"))
-        # TODO: update the values below to be lists which can be run in subprocess
         self.DOWNLOAD_COMMANDS = {
             'pypi': 'pip install {} --quiet --target {}',
-            'npm': 'npm i {} --prefix ./{}'
+            'npm': 'npm i {} --prefix {}'
         }
 
-    def download_package_contents(self):
+    def _download_package_contents(self):
         # run download command
-        # TODO: add handling for npm
-        with subprocess.Popen(['pip', 'install', self.package_name, '--quiet', '--target', '{}'.format(self.local_package_file_path)], stdout=subprocess.PIPE) as proc:
+        with subprocess.Popen(self.DOWNLOAD_COMMANDS[self.package_location].format(self.package_name, self.local_package_file_path).split(' '), stdout=subprocess.PIPE) as proc:
             # TODO: improve handling here to catch errors
-            print("stdout {}".format(proc.stdout.read()))
+            print("stdout: {}".format(proc.stdout.read()))
 
-    def get_hashes_of_package(self):
+    def _get_hashes_of_package(self):
         package_hashes = dict()
+
+        # create a path for a pypi package
+        if self.package_location == 'pypi':
+            base_package_path = os.path.join(self.local_package_file_path, self.package_name)
+        # create a path for an npm package
+        if self.package_location == 'npm':
+            base_package_path = os.path.join(self.local_package_file_path, 'node_modules', self.package_name)
+
         # iterate through the directories in the newly downloaded package
-        for path, dirs, files in os.walk(os.path.join(self.local_package_file_path, self.package_name)):
-            if len(files) == 0:
-                raise RuntimeError('No files found for the {} package'.format(self.package_name))
+        for path, dirs, files in os.walk(base_package_path):
             for file_ in files:
                 # capture the base path to the file
                 file_path = '{}/{}'.format(path, file_)
@@ -48,7 +51,7 @@ class Pacmon(object):
 
         return package_hashes
 
-    def get_previous_hashes(self):
+    def _get_previous_hashes(self):
         try:
             with open(self.output_path, 'r') as f:
                 self.previous_data = json.loads(f.read())
@@ -56,40 +59,43 @@ class Pacmon(object):
             self.previous_data = dict()
         return self.previous_data
 
-    def compare_hashes(self):
+    def _compare_hashes(self):
         """Compare the hashes of the files in the newly downloaded package with those of the old package."""
-        changed_files = list()
-        # TODO: improve handling to show additions, removals, and changes
+        changes = {
+            'added_files': list(),
+            'removed_files': list(),
+            'changed_files': list()
+        }
         # if the previous hashes are the same as the current hashes, no changed files
         if self.previous_data[self.package_name] != self.package_hashes:
             for key, value in self.package_hashes.items():
                 if self.previous_data[self.package_name].get(key):
                     # if the file's hash has changed, record it
                     if self.previous_data[self.package_name][key] != value:
-                        changed_files.append(key)
+                        changes['changed_files'].append(key)
                 # if the file is a new file, record it
                 else:
-                    changed_files.append(key)
+                    changes['added_files'].append(key)
 
             # see if there are any files in the old data that are not in the new data
             for key in self.previous_data[self.package_name]:
                 # if the file does not exist in the new package, record it
                 if not self.package_hashes.get(key):
-                    changed_files.append(key)
-        return changed_files
+                    changes['removed_files'].append(key)
+        return changes
 
-
-    def send_alert(self, changes):
+    def _send_alert(self, changes):
         # TODO: implement
         pass
 
-    def record_package_hashes(self):
+    def _record_package_hashes(self):
         self.previous_data[self.package_name] = self.package_hashes
         with open(self.output_path, 'w+') as f:
             json.dump(self.previous_data, f)
 
-    def monitor(self, package_location, package_name):
+    def check_package(self, package_location, package_name):
         """Monitor the given package from the given package_location."""
+        changes = dict()
         if package_location not in self.DOWNLOAD_COMMANDS:
             raise ValueError('That package location ({}) is not supported. The available package locations are: {}'.format(package_location, self.DOWNLOAD_COMMANDS.keys()))
         else:
@@ -100,28 +106,23 @@ class Pacmon(object):
             self.local_package_file_path = tmp_dir_name
 
             # DOWNLOAD PACKAGE CONTENTS
-            self.download_package_contents()
+            self._download_package_contents()
 
             # GET HASHES OF PACKAGE CONTENTS
-            self.package_hashes = self.get_hashes_of_package()
+            self.package_hashes = self._get_hashes_of_package()
 
         # COMPARE HASHES OF NEW PACKAGE WITH THOSE OF THE OLD PACKAGE
-        changed_files = list()
         # see if there are previous hashes for this library
-        if self.get_previous_hashes().get(self.package_name):
+        if self._get_previous_hashes().get(self.package_name):
             # if there are previous hashes for this library, compare the new hashes with the old ones
-            changed_files = self.compare_hashes()
+            changes = self._compare_hashes()
             # SEND ALERT
-            if changed_files:
-                self.send_alert(changed_files)
+            if changes['added_files'] or changes['removed_files'] or changes['changed_files']:
+                self._send_alert(changes)
         else:
             print("There is no previous data for the {} package. I've recorded the current data and will let you know if something changes next time you check this package.".format(self.package_name))
 
         # RECORD THE PACKAGE HASHES
-        self.record_package_hashes()
+        self._record_package_hashes()
 
-        return changed_files
-
-
-if __name__ == '__main__':
-    main()
+        return changes
