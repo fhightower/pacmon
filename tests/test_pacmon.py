@@ -105,3 +105,16 @@ def test_npm_file_change():
     assert len(changes['added_files']) == 20
     assert len(changes['removed_files']) == 0
     assert len(changes['changed_files']) == 2
+
+
+@pytest.mark.npm
+def test_dual_package_check():
+    """Make sure packages are downloaded and stored properly."""
+    p = pacmon.Pacmon()
+    p.check_package('npm', 'spaces-ng')
+    p.check_package('pypi', 'onemillion')
+
+    with open(p.output_path, 'r') as f:
+        hashes = json.load(f)
+        assert 'spaces-ng' in hashes
+        assert 'onemillion' in hashes

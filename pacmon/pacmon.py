@@ -8,9 +8,11 @@ import os
 import subprocess
 import tempfile
 
+DEFAULT_OUTPUT_DATA_PATH = os.path.join(os.path.expanduser('~/.pacmon'), 'pacmon_hashes.json')
+
 
 class Pacmon(object):
-    def __init__(self, output_path=os.path.abspath(os.path.join(os.path.dirname(__file__), "./data/hashes.json"))):
+    def __init__(self, output_path=os.path.join(DEFAULT_OUTPUT_DATA_PATH)):
         super(Pacmon, self).__init__()
         self.local_package_file_path = None
         self.output_path = output_path
@@ -22,6 +24,11 @@ class Pacmon(object):
             'pypi': 'pip install {} --quiet --target {}',
             'npm': 'npm i {} --prefix {}'
         }
+
+        # if the output path does not exist, create it
+        if not os.path.exists(self.output_path):
+            # create the directory in the specified cache_location
+            os.makedirs(self.output_path)
 
     def _download_package_contents(self):
         # run download command
@@ -84,10 +91,6 @@ class Pacmon(object):
                     changes['removed_files'].append(key)
         return changes
 
-    def _send_alert(self, changes):
-        # TODO: implement
-        pass
-
     def _record_package_hashes(self):
         self.previous_data[self.package_name] = self.package_hashes
         with open(self.output_path, 'w+') as f:
@@ -116,9 +119,9 @@ class Pacmon(object):
         if self._get_previous_hashes().get(self.package_name):
             # if there are previous hashes for this library, compare the new hashes with the old ones
             changes = self._compare_hashes()
-            # SEND ALERT
-            if changes['added_files'] or changes['removed_files'] or changes['changed_files']:
-                self._send_alert(changes)
+            # # SEND ALERT - On Aug. 21 I removed the code to send an alert... I'll handle this elsewhere
+            # if changes['added_files'] or changes['removed_files'] or changes['changed_files']:
+            #     self._send_alert(changes)
         else:
             print("There is no previous data for the {} package. I've recorded the current data and will let you know if something changes next time you check this package.".format(self.package_name))
 
